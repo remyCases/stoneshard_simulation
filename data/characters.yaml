@@ -1,0 +1,12 @@
+main: 
+  hp: 105
+  weapon_dmg: 1.1
+  accuracy: 0.887
+  fumble: 0.0
+  crit_chance: 0.16
+  crit_eff: 1.48
+  counter: 0.435
+  dodge: 0.41
+  block: 0.125
+  damage: 24
+  block_value: 29

@@ -1,0 +1,11 @@
+self:
+  - warcray_self
+  - fencer_stance
+  - seized_initiative
+  - disengage_self
+other:
+  - warcray_other
+  - loss_initiative
+  - disengage_other
+
+

@@ -1,0 +1,29 @@
+bear:
+  hp: 600
+  protection: 0
+  weapon_dmg: 1.0
+  accuracy: 0.75
+  fumble: 0.25
+  crit_chance: 0.25
+  crit_eff: 1.5
+  armor_pen: 0.5
+  counter: 0.0
+  dodge: -0.15
+  block: 0.0
+  damage: 32
+  block_value: 0
+
+moose:
+  hp: 400
+  protection: 0
+  weapon_dmg: 1.0
+  accuracy: 0.85
+  fumble: 0.20
+  crit_chance: 0.0
+  crit_eff: 1.0
+  armor_pen: 0.15
+  counter: 0.0
+  dodge: 0.0
+  block: 0.0
+  damage: 30
+  block_value: 0

@@ -1,0 +1,53 @@
+warcray_other:
+  turn: 8
+  effect:
+    weapon_dmg: -0.1
+    fumble: 0.1
+    crit_chance: -0.1
+    crit_eff: -0.25
+    block_chance: -0.15
+
+confusion:
+  turn: 1
+  effect:
+    dodge_chance: -0.25
+
+warcray_self:
+  turn: 5
+  effect:
+    weapon_dmg: 0.1
+    crit_chance: 0.05
+    crit_eff: 0.2
+
+fencer_stance:
+  turn: 6
+  effect:
+    counter: 0.05
+    block: 0.08
+    dodge: 0.075
+    weapon_dmg: 0.05
+
+seized_initiative:
+  turn: 0
+  effect:
+    counter: 0.06
+    fumble: -0.06
+    accuracy: 0.06
+
+loss_initiative:
+  turn: 0
+  effect:
+    counter: -0.06
+    fumble: 0.06
+    accuracy: -0.06
+
+disengage_self:
+  turn: 0
+  effect:
+    dodge: 0.03
+
+disengage_other:
+  turn: 0
+  effect:
+    fumble: 0.05
+    accuracy: -0.05
