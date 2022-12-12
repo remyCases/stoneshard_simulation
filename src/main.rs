@@ -32,6 +32,13 @@ impl Char<'_> {
     }
 }
 
+#[derive(Debug)]
+struct ResultSimulation {
+    first_hp_at_end: u64,
+    second_hp_at_end: u64,
+    turn: u64,
+}
+
 fn expected_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> [f64; 2] {
     let damage_first: f64 = first.attack(second, false).unwrap().expected_damage() + 
     first.attack(second, true).unwrap().expected_damage();
@@ -41,7 +48,7 @@ fn expected_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> [f64; 2]
     [damage_first, damage_second]
 }
 
-fn expected_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Option<[u64; 3]> {
+fn expected_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Option<ResultSimulation> {
     let mut hp_first = first.stat.get_hp()?;
     let mut hp_second = second.stat.get_hp()?;
     let mut count: u64 = 0;
@@ -58,7 +65,11 @@ fn expected_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Optio
         }
     }
 
-    Some([hp_first, hp_second, count])
+    Some(ResultSimulation { 
+        first_hp_at_end: hp_first,
+        second_hp_at_end: hp_second,
+        turn: count, }
+    )
 }
 
 fn main() -> Result<(), serde_yaml::Error> {
@@ -78,12 +89,18 @@ fn main() -> Result<(), serde_yaml::Error> {
     let deserialized_effects: HashMap<String, Skill> = serde_yaml::from_reader(&file_effects).unwrap();
     let deserialized_action: HashMap<String, Vec<String>> = serde_yaml::from_reader(&file_action).unwrap();
 
-    let mut raw_bear: Char = Char { stat: deserialized_enemies["bear"], skills: Vec::<&Skill>::new(), };
-    let mut raw_main: Char = Char { stat: deserialized_chars["main"], skills: Vec::<&Skill>::new(), };
+    let mut ref_bear: Char = Char { stat: deserialized_enemies["bear"], skills: Vec::<&Skill>::new(), };
+    let mut ref_main: Char = Char { stat: deserialized_chars["main"], skills: Vec::<&Skill>::new(), };
 
     let mut buf_bear: Char = Char { stat: deserialized_enemies["bear"], skills: Vec::<&Skill>::new(), };
     let mut buf_main: Char = Char { stat: deserialized_chars["main"], skills: Vec::<&Skill>::new(), };
 
+    for s in deserialized_action["other_ref"].iter() {
+        ref_bear.skills.push(&deserialized_effects[s]);
+    }
+    for s in deserialized_action["self_ref"].iter() {
+        ref_main.skills.push(&deserialized_effects[s]);
+    }
     for s in deserialized_action["other"].iter() {
         buf_bear.skills.push(&deserialized_effects[s]);
     }
@@ -92,7 +109,7 @@ fn main() -> Result<(), serde_yaml::Error> {
     }
 
     let max_turn: u64 = 100;
-    let raw_expectation = expected_damage_n_cycles(&mut raw_bear, &mut raw_main, max_turn);
+    let raw_expectation = expected_damage_n_cycles(&mut ref_bear, &mut ref_main, max_turn);
     println!("{:?}", raw_expectation);
     let after_buf_expectation = expected_damage_n_cycles(&mut buf_bear, &mut buf_main, max_turn);
     println!("{:?}", after_buf_expectation);

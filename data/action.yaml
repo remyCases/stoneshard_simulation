@@ -1,3 +1,10 @@
+self_ref:
+  - warcray_self
+  - fencer_stance
+  - seized_initiative
+other_ref:
+  - warcray_other
+  - loss_initiative
 self:
   - warcray_self
   - fencer_stance
