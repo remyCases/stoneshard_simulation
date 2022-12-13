@@ -1,4 +1,6 @@
 use std::fmt;
+use rand::{self, Rng};
+use std::ops::ControlFlow;
 
 #[derive(PartialEq)]
 pub struct Hit {
@@ -18,6 +20,30 @@ pub struct Hit {
 }
 
 impl Hit {
+    pub fn simulate_damage(&self) -> f64 {
+        let mut rng = rand::thread_rng();
+        let random_value: f64 = rng.gen_range(0.0..1.0);
+
+        let proba_array: [f64; 6] = [self.crit_hit_chance, self.normal_hit_chance, self.half_hit_chance, 
+        self.block_crit_hit_chance, self.block_normal_hit_chance, self.block_half_hit_chance];
+
+        let dmg_array: [u64; 6] = [self.crit_hit_damage, self.normal_hit_damage, self.half_hit_damage, 
+        self.block_crit_hit_damage, self.block_normal_hit_damage, self.block_half_hit_damage];
+
+        let choose_hit = proba_array.iter().enumerate().try_fold(0.0, |acc, (n, x)| {
+            if (acc + x) > random_value {
+                ControlFlow::Break(n)
+            } else {
+                ControlFlow::Continue(acc + x)
+            }
+        });
+
+        match choose_hit {
+            ControlFlow::Break(n) => dmg_array[n] as f64,
+            ControlFlow::Continue(_) => 0.0,
+        }
+    }
+
     pub fn expected_damage(&self) -> f64 {
         self.half_hit_chance * self.half_hit_damage as f64 + self.normal_hit_chance * self.normal_hit_damage as f64 + 
         self.crit_hit_chance * self.crit_hit_damage  as f64 + self.block_half_hit_chance * self.block_half_hit_damage as f64 + 

@@ -48,12 +48,45 @@ fn expected_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> [f64; 2]
     [damage_first, damage_second]
 }
 
+fn simulate_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> [f64; 2] {
+    let damage_first: f64 = first.attack(second, false).unwrap().simulate_damage() + 
+    first.attack(second, true).unwrap().expected_damage();
+    let damage_second: f64 = second.attack(first, false).unwrap().simulate_damage() + 
+    second.attack(first, true).unwrap().expected_damage();
+
+    [damage_first, damage_second]
+}
+
 fn expected_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Option<ResultSimulation> {
     let mut hp_first = first.stat.get_hp()?;
     let mut hp_second = second.stat.get_hp()?;
     let mut count: u64 = 0;
     for _ in 0..n {
         let [damage_first, damage_second] = expected_damage_cycle_attack_via_stat(&first.compute(), &second.compute());
+        hp_first = if damage_second as u64 > hp_first { 0 } else { hp_first - damage_second as u64 };
+        hp_second = if damage_first as u64 > hp_second { 0 } else { hp_second - damage_first as u64 };
+        count += 1;
+        first.remove_outdated_skills(&count);
+        second.remove_outdated_skills(&count);
+
+        if hp_first == 0 || hp_second == 0 {
+            break;
+        }
+    }
+
+    Some(ResultSimulation { 
+        first_hp_at_end: hp_first,
+        second_hp_at_end: hp_second,
+        turn: count, }
+    )
+}
+
+fn simulate_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Option<ResultSimulation> {
+    let mut hp_first = first.stat.get_hp()?;
+    let mut hp_second = second.stat.get_hp()?;
+    let mut count: u64 = 0;
+    for _ in 0..n {
+        let [damage_first, damage_second] = simulate_damage_cycle_attack_via_stat(&first.compute(), &second.compute());
         hp_first = if damage_second as u64 > hp_first { 0 } else { hp_first - damage_second as u64 };
         hp_second = if damage_first as u64 > hp_second { 0 } else { hp_second - damage_first as u64 };
         count += 1;
@@ -111,10 +144,8 @@ fn main() -> Result<(), serde_yaml::Error> {
     let max_turn: u64 = 100;
     let raw_expectation = expected_damage_n_cycles(&mut ref_bear, &mut ref_main, max_turn);
     println!("{:?}", raw_expectation);
-    let after_buf_expectation = expected_damage_n_cycles(&mut buf_bear, &mut buf_main, max_turn);
+    let after_buf_expectation = simulate_damage_n_cycles(&mut buf_bear, &mut buf_main, max_turn);
     println!("{:?}", after_buf_expectation);
 
     Ok(()) 
-
-    /*I used the formula and data I found on the wiki. Right now it only simulate a "static" combat with only passives and buffs (nor actives nor secondary effects as bleed) */
 }
