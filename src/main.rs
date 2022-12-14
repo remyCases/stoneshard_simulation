@@ -3,8 +3,9 @@ mod hit;
 
 use serde::{Serialize, Deserialize};
 use serde_yaml;
-use std::{fs::File, collections::HashMap};
+use std::{fs::File, collections::HashMap, ops::{AddAssign, Add}};
 use stat::Stat;
+use hit::Hit;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Skill {
@@ -32,37 +33,74 @@ impl Char<'_> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct ResultSimulation {
     first_hp_at_end: u64,
     second_hp_at_end: u64,
     turn: u64,
 }
 
-fn expected_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> [f64; 2] {
-    let damage_first: f64 = first.attack(second, false).unwrap().expected_damage() + 
-    first.attack(second, true).unwrap().expected_damage();
-    let damage_second: f64 = second.attack(first, false).unwrap().expected_damage() + 
-    second.attack(first, true).unwrap().expected_damage();
+impl Add for ResultSimulation {
+    type Output = ResultSimulation;
 
-    [damage_first, damage_second]
+    fn add(self, rhs: Self) -> Self::Output {
+        ResultSimulation {
+            first_hp_at_end: self.first_hp_at_end + rhs.first_hp_at_end,
+            second_hp_at_end: self.second_hp_at_end + rhs.second_hp_at_end,
+            turn: self.turn + rhs.turn,
+        }
+    }
 }
 
-fn simulate_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> [f64; 2] {
-    let damage_first: f64 = first.attack(second, false).unwrap().simulate_damage() + 
-    first.attack(second, true).unwrap().expected_damage();
-    let damage_second: f64 = second.attack(first, false).unwrap().simulate_damage() + 
-    second.attack(first, true).unwrap().expected_damage();
+impl AddAssign for ResultSimulation {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
 
-    [damage_first, damage_second]
+#[derive(Debug)]
+struct StatSimu {
+    mean: f64,
+    var: f64,
+    n: u64,
+}
+
+impl StatSimu {
+    fn confident_interval(&self) -> [f64; 3] {
+        let factor: f64 = f64::sqrt(self.var / self.n as f64) * 1.96;
+        [self.mean - factor, self.mean, self.mean + factor]
+    }
+}
+
+fn expected_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> Option<[f64; 2]> {
+    let hit_first: Hit = first.attack(second)?;
+    let hit_second: Hit = second.attack(first)?;
+
+    let damage_first: f64 = hit_first.expected_damage(None) + hit_first.expected_damage(first.get_counter());
+    let damage_second: f64 = hit_second.expected_damage(None) + hit_second.expected_damage(second.get_counter());
+
+    Some([damage_first, damage_second])
+}
+
+fn simulate_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> Option<[f64; 2]> {
+    let hit_first: Hit = first.attack(second)?;
+    let hit_second: Hit = second.attack(first)?;
+
+    let damage_first: f64 = hit_first.simulate_damage(None) + hit_first.simulate_damage(first.get_counter());
+    let damage_second: f64 = hit_second.simulate_damage(None) + hit_second.simulate_damage(second.get_counter());
+
+    Some([damage_first, damage_second])
 }
 
 fn expected_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Option<ResultSimulation> {
     let mut hp_first = first.stat.get_hp()?;
     let mut hp_second = second.stat.get_hp()?;
     let mut count: u64 = 0;
+    let mut damage_first: f64;
+    let mut damage_second: f64;
+
     for _ in 0..n {
-        let [damage_first, damage_second] = expected_damage_cycle_attack_via_stat(&first.compute(), &second.compute());
+        [damage_first, damage_second] = expected_damage_cycle_attack_via_stat(&first.compute(), &second.compute())?;
         hp_first = if damage_second as u64 > hp_first { 0 } else { hp_first - damage_second as u64 };
         hp_second = if damage_first as u64 > hp_second { 0 } else { hp_second - damage_first as u64 };
         count += 1;
@@ -86,7 +124,7 @@ fn simulate_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Optio
     let mut hp_second = second.stat.get_hp()?;
     let mut count: u64 = 0;
     for _ in 0..n {
-        let [damage_first, damage_second] = simulate_damage_cycle_attack_via_stat(&first.compute(), &second.compute());
+        let [damage_first, damage_second] = simulate_damage_cycle_attack_via_stat(&first.compute(), &second.compute())?;
         hp_first = if damage_second as u64 > hp_first { 0 } else { hp_first - damage_second as u64 };
         hp_second = if damage_first as u64 > hp_second { 0 } else { hp_second - damage_first as u64 };
         count += 1;
@@ -105,8 +143,44 @@ fn simulate_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Optio
     )
 }
 
-fn main() -> Result<(), serde_yaml::Error> {
+fn monte_carlo_damage(first: &mut Char, second: &mut Char, n: u64) -> Option<[StatSimu; 3]> {
+    let mut sum_win: u64 = 0;
+    let mut sum_hp_first: u64 = 0;
+    let mut sum_hp_second: u64 = 0;
+    let mut sumsq_hp_first: u64 = 0;
+    let mut sumsq_hp_second: u64 = 0;
+    let n_simu: u64 = 10000;
+    for _ in 0..n_simu {
+        let result_simulation = simulate_damage_n_cycles(first, second, n)?;
+        sum_win += if result_simulation.first_hp_at_end > 0 {1} else {0};
+        sum_hp_first += result_simulation.first_hp_at_end;
+        sumsq_hp_first += result_simulation.first_hp_at_end * result_simulation.first_hp_at_end;
+        sum_hp_second += result_simulation.second_hp_at_end;
+        sumsq_hp_second += result_simulation.second_hp_at_end* result_simulation.second_hp_at_end;
+    }
 
+    let mean_win: f64 = sum_win as f64/ n_simu as f64;
+    let mean_hp_first: f64 = sum_hp_first as f64/ n_simu as f64;
+    let mean_hp_second: f64 = sum_hp_second as f64/ n_simu as f64;
+    Some([
+        StatSimu{
+            mean: mean_win,
+            var: mean_win - mean_win * mean_win,
+            n: n_simu,
+        }, 
+        StatSimu{
+            mean: mean_hp_first,
+            var: sumsq_hp_first as f64/ n_simu as f64 - mean_hp_first * mean_hp_first,
+            n: n_simu,
+        },
+        StatSimu{
+            mean: mean_hp_second,
+            var: sumsq_hp_second as f64/ n_simu as f64 - mean_hp_second * mean_hp_second,
+            n: n_simu,
+        }])
+}
+
+fn main() -> Result<(), serde_yaml::Error> {
     let path_enemies: &str = "./data/enemies.yaml";
     let path_chars: &str = "./data/characters.yaml";
     let path_effects: &str = "./data/effects.yaml";
@@ -142,10 +216,16 @@ fn main() -> Result<(), serde_yaml::Error> {
     }
 
     let max_turn: u64 = 100;
-    let raw_expectation = expected_damage_n_cycles(&mut ref_bear, &mut ref_main, max_turn);
-    println!("{:?}", raw_expectation);
-    let after_buf_expectation = simulate_damage_n_cycles(&mut buf_bear, &mut buf_main, max_turn);
-    println!("{:?}", after_buf_expectation);
+    let raw_expectation = monte_carlo_damage(&mut ref_bear, &mut ref_main, max_turn);
+    let unwrap_raw = raw_expectation.unwrap();
+    for i in 0..3 {
+        println!("{:?}", unwrap_raw[i].confident_interval());
+    }
+    let after_buf_expectation = monte_carlo_damage(&mut buf_bear, &mut buf_main, max_turn);
+    let unwrap_buf = after_buf_expectation.unwrap();
+    for i in 0..3 {
+        println!("{:?}", unwrap_buf[i].confident_interval());
+    }
 
     Ok(()) 
 }

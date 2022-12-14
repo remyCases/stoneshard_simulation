@@ -1,6 +1,6 @@
 use std::ops::{Add, AddAssign};
 use serde::{Serialize, Deserialize};
-use crate::hit::Hit;
+use crate::hit::{Chance, Damage, Hit};
 
 trait CustomAdd<T = Self> {
     type Output;
@@ -41,19 +41,24 @@ impl Stat {
         self.hp
     }
 
-    pub fn attack(&self, other: &Stat, is_counter: bool) -> Option<Hit>{
+    pub fn get_counter(&self) -> Option<f64> {
+        self.counter
+    }
+
+    pub fn attack(&self, other: &Stat) -> Option<Hit>{
         let self_accuracy = self.accuracy?;
         let self_fumble = self.fumble?;
         let self_crit_chance = self.crit_chance?;
         let self_crit_eff = self.crit_eff?;
+        let self_armor_pen = self.armor_pen?;
         let self_weapon_dmg = self.weapon_dmg?;
-        let self_counter = if is_counter {self.counter?} else {1.0};
 
         let self_damage = self.damage?;
         
         let other_dodge = other.dodge?;
         let other_block = other.block?;
         let other_block_value = other.block_value?;
+        let other_protection = other.protection?;
 
         let accuracy = if other_dodge < 0.0 { 
             if self_accuracy - other_dodge > 1.0 {
@@ -75,24 +80,29 @@ impl Stat {
         let normal_hit = accuracy * (1.0 - fumble) * (1.0 - dodge) * (1.0 - self_crit_chance);
         let crit_hit = accuracy * (1.0 - fumble) * (1.0 - dodge) * self_crit_chance;
 
-        let crit_damage = (damage as f64 * self_crit_eff) as u64;
+        let crit_eff = if self_crit_eff < 1.0 {1.0} else {self_crit_eff};
+        let crit_damage = (damage as f64 * crit_eff) as u64;
+        let prot = (other_protection as f64 * (1.0 - self_armor_pen)) as u64;
 
-        Some(Hit {
-            crit_hit_chance: crit_hit * (1.0 - other_block) * self_counter,
-            normal_hit_chance : normal_hit * (1.0 - other_block) * self_counter,
-            half_hit_chance : half_hit * (1.0 - other_block) * self_counter,
-            block_crit_hit_chance : crit_hit * other_block * self_counter,
-            block_normal_hit_chance : normal_hit * other_block * self_counter,
-            block_half_hit_chance : half_hit * other_block * self_counter,
+        let chance = Chance::new(
+            crit_hit * (1.0 - other_block),
+            normal_hit * (1.0 - other_block),
+            half_hit * (1.0 - other_block),
+            crit_hit * other_block,
+            normal_hit * other_block,
+            half_hit * other_block
+        );
 
-            crit_hit_damage: crit_damage,
-            normal_hit_damage: damage,
-            half_hit_damage: damage / 2,
-            block_crit_hit_damage: if crit_damage > other_block_value {crit_damage - other_block_value} else {0},
-            block_normal_hit_damage: if damage > other_block_value {damage - other_block_value} else {0},
-            block_half_hit_damage: if damage / 2 > other_block_value {damage / 2 - other_block_value} else {0},
-        })
+        let dmg = Damage::new(
+            if crit_damage > prot {crit_damage - prot} else {0},
+            if damage > prot {damage - prot} else {0},
+            if damage / 2 > prot {damage / 2 - prot} else {0},
+            if crit_damage > other_block_value + prot {crit_damage - other_block_value - prot} else {0},
+            if damage > other_block_value + prot {damage - other_block_value - prot} else {0},
+            if damage / 2 > other_block_value + prot {damage / 2 - other_block_value - prot} else {0}
+        );
 
+        Some(Hit::new(chance, dmg))
     }
 }
 
