@@ -8,7 +8,21 @@ use stat::Stat;
 use hit::Hit;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
+enum IdSkills {
+    warcry_other,
+    confusion,
+    warcry_self,
+    fencer_stance,
+    seized_initiative,
+    loss_initiative,
+    disengage_self,
+    disengage_other,
+    bleeding,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Skill {
+    id: IdSkills,
     turn: u64,
     effect: Stat,
 }
@@ -72,16 +86,6 @@ impl StatSimu {
     }
 }
 
-fn expected_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> Option<[f64; 2]> {
-    let hit_first: Hit = first.attack(second)?;
-    let hit_second: Hit = second.attack(first)?;
-
-    let damage_first: f64 = hit_first.expected_damage(None) + hit_first.expected_damage(first.get_counter());
-    let damage_second: f64 = hit_second.expected_damage(None) + hit_second.expected_damage(second.get_counter());
-
-    Some([damage_first, damage_second])
-}
-
 fn simulate_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> Option<[f64; 2]> {
     let hit_first: Hit = first.attack(second)?;
     let hit_second: Hit = second.attack(first)?;
@@ -89,34 +93,8 @@ fn simulate_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> Option<[
     let damage_first: f64 = hit_first.simulate_damage(None) + hit_first.simulate_damage(first.get_counter());
     let damage_second: f64 = hit_second.simulate_damage(None) + hit_second.simulate_damage(second.get_counter());
 
-    Some([damage_first, damage_second])
-}
-
-fn expected_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Option<ResultSimulation> {
-    let mut hp_first = first.stat.get_hp()?;
-    let mut hp_second = second.stat.get_hp()?;
-    let mut count: u64 = 0;
-    let mut damage_first: f64;
-    let mut damage_second: f64;
-
-    for _ in 0..n {
-        [damage_first, damage_second] = expected_damage_cycle_attack_via_stat(&first.compute(), &second.compute())?;
-        hp_first = if damage_second as u64 > hp_first { 0 } else { hp_first - damage_second as u64 };
-        hp_second = if damage_first as u64 > hp_second { 0 } else { hp_second - damage_first as u64 };
-        count += 1;
-        first.remove_outdated_skills(&count);
-        second.remove_outdated_skills(&count);
-
-        if hp_first == 0 || hp_second == 0 {
-            break;
-        }
-    }
-
-    Some(ResultSimulation { 
-        first_hp_at_end: hp_first,
-        second_hp_at_end: hp_second,
-        turn: count, }
-    )
+    Some([damage_first + second.residual_damage()?, 
+        damage_second + first.residual_damage()?])
 }
 
 fn simulate_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Option<ResultSimulation> {

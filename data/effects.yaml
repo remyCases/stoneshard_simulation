@@ -1,4 +1,5 @@
-warcray_other:
+warcry_other:
+  id: warcry_other
   turn: 8
   effect:
     weapon_dmg: -0.1
@@ -8,11 +9,13 @@ warcray_other:
     block_chance: -0.15
 
 confusion:
+  id: confusion
   turn: 1
   effect:
     dodge_chance: -0.25
 
-warcray_self:
+warcry_self:
+  id: warcry_self
   turn: 5
   effect:
     weapon_dmg: 0.1
@@ -20,6 +23,7 @@ warcray_self:
     crit_eff: 0.2
 
 fencer_stance:
+  id: fencer_stance
   turn: 6
   effect:
     counter: 0.05
@@ -28,6 +32,7 @@ fencer_stance:
     weapon_dmg: 0.05
 
 seized_initiative:
+  id: seized_initiative
   turn: 0
   effect:
     counter: 0.06
@@ -35,6 +40,7 @@ seized_initiative:
     accuracy: 0.06
 
 loss_initiative:
+  id: loss_initiative
   turn: 0
   effect:
     counter: -0.06
@@ -42,12 +48,21 @@ loss_initiative:
     accuracy: -0.06
 
 disengage_self:
+  id: disengage_self
   turn: 0
   effect:
     dodge: 0.03
 
 disengage_other:
+  id: disengage_other
   turn: 0
   effect:
     fumble: 0.05
     accuracy: -0.05
+
+bleeding:
+  id: bleeding
+  turn: 0
+  effect:
+    flat_damage_receive: 3
+    percent_damage_receive: 0.01

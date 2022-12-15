@@ -1,14 +1,57 @@
 main: 
-  hp: 105
-  protection: 2
+  hp: 100
+  damage: 21
+  damage_type: slash
   weapon_dmg: 1.1
-  accuracy: 0.887
-  fumble: 0.0
+  main_hand_eff: 1.08
+  armor_pen: 0.23
+  accuracy: 0.888
   crit_chance: 0.16
   crit_eff: 1.48
-  armor_pen: 0.5
-  counter: 0.435
-  dodge: 0.41
-  block: 0.125
-  damage: 24
-  block_value: 29
+  counter: 0.515
+  fumble: 0.0
+  bleed_chance: 0.05
+  daze_chance: 0.0
+  stun_chance: 0.0
+  knockback_chance: 0.0
+  immobilization_chance: 0.0
+  stagger_chance: 0.0
+  block: 0.225
+  block_power: 29
+  dodge: 0.52
+  fortitude: 0.15
+  control_res: 0.05
+  move_res: 0.43
+  damage_taken: 0.97
+  head: 
+    protection: 5
+    phy_res: 0.16
+    slash_res: 0.16
+    pierc_res: 0.16
+    crush_res: 0.21
+    rend_res: 0.21
+    bleed_res: 0.46
+  torso: 
+    protection: 5
+    phy_res: 0.13
+    slash_res: 0.13
+    pierc_res: 0.13
+    crush_res: 0.16
+    rend_res: 0.18
+    bleed_res: 0.28
+  hands:
+    protection: 5
+    phy_res: 0.16
+    slash_res: 0.16
+    pierc_res: 0.16
+    crush_res: 0.21
+    rend_res: 0.21
+    bleed_res: 0.18
+  legs:
+    protection: 6
+    phy_res: 0.16
+    slash_res: 0.16
+    pierc_res: 0.16
+    crush_res: 0.16
+    rend_res: 0.21
+    bleed_res: 0.43

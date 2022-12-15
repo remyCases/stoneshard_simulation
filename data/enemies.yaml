@@ -1,29 +1,109 @@
 bear:
   hp: 600
-  protection: 0
-  weapon_dmg: 1.0
-  accuracy: 0.75
-  fumble: 0.25
-  crit_chance: 0.25
-  crit_eff: 1.5
-  armor_pen: 0.5
-  counter: 0.0
-  dodge: -0.15
-  block: 0.0
   damage: 32
-  block_value: 0
-
-moose:
-  hp: 400
-  protection: 0
+  damage_type: rend
   weapon_dmg: 1.0
-  accuracy: 0.85
-  fumble: 0.20
-  crit_chance: 0.0
-  crit_eff: 1.0
-  armor_pen: 0.15
+  armor_pen: 0.5
+  accuracy: 0.75
+  crit_chance: 0.25
+  crit_eff: 1.50
   counter: 0.0
-  dodge: 0.0
+  fumble: 0.25
+  bleed_chance: 0.75
+  daze_chance: 0.25
+  stun_chance: 0.50
+  knockback_chance: 0.0
+  immobilization_chance: 0.0
+  stagger_chance: 0.0
   block: 0.0
-  damage: 30
-  block_value: 0
+  block_power: 0
+  dodge: -0.15
+  control_res: 0.0
+  move_res: 0.75
+  head: 
+    protection: 0
+    phy_res: 0.05
+    slash_res: 0.05
+    pierc_res: 0.15
+    crush_res: 0.05
+    rend_res: 0.05
+    bleed_res: 0.20
+  torso: 
+    protection: 0
+    phy_res: 0.05
+    slash_res: 0.05
+    pierc_res: 0.15
+    crush_res: 0.05
+    rend_res: 0.05
+    bleed_res: 0.20
+  hands:
+    protection: 0
+    phy_res: 0.05
+    slash_res: 0.05
+    pierc_res: 0.15
+    crush_res: 0.05
+    rend_res: 0.05
+    bleed_res: 0.20
+  legs:
+    protection: 0
+    phy_res: 0.05
+    slash_res: 0.05
+    pierc_res: 0.15
+    crush_res: 0.05
+    rend_res: 0.05
+    bleed_res: 0.20
+
+crawler:
+  hp: 60
+  damage: 18
+  damage_type: pierc
+  weapon_dmg: 1.0
+  armor_pen: 0.0
+  accuracy: 0.70
+  crit_chance: 0.10
+  crit_eff: 1.0
+  counter: 0.15
+  fumble: 0.33
+  bleed_chance: 0.33
+  daze_chance: 0.0
+  stun_chance: 0.0
+  knockback_chance: 0.0
+  immobilization_chance: 0.33
+  stagger_chance: 0.0
+  block: 0.0
+  block_power: 0
+  dodge: 0.0
+  control_res: 0.75
+  move_res: -0.33
+  head: 
+    protection: 12
+    phy_res: 0.40
+    slash_res: 0.40
+    pierc_res: 0.40
+    crush_res: 0.20
+    rend_res: 0.40
+    bleed_res: 0.33
+  torso: 
+    protection: 12
+    phy_res: 0.40
+    slash_res: 0.40
+    pierc_res: 0.40
+    crush_res: 0.20
+    rend_res: 0.40
+    bleed_res: 0.33
+  hands:
+    protection: 12
+    phy_res: 0.40
+    slash_res: 0.40
+    pierc_res: 0.40
+    crush_res: 0.20
+    rend_res: 0.40
+    bleed_res: 0.33
+  legs:
+    protection: 12
+    phy_res: 0.40
+    slash_res: 0.40
+    pierc_res: 0.40
+    crush_res: 0.20
+    rend_res: 0.40
+    bleed_res: 0.33
