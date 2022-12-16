@@ -2,6 +2,13 @@ use rand::{self, Rng};
 use std::ops::ControlFlow;
 use std::iter::zip;
 
+pub enum HitType {
+    CritHit,
+    NormalHit,
+    HalfHit,
+    NoHit,
+}
+
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub struct Chance {
     crit_hit: f64,
@@ -23,6 +30,17 @@ impl Chance {
                 block_normal_hit,
                 block_half_hit,
             }
+    }
+
+    pub fn default() -> Self {
+        Chance {
+            crit_hit: 0.0,
+            normal_hit: 0.0,
+            half_hit: 0.0,
+            block_crit_hit: 0.0,
+            block_normal_hit: 0.0,
+            block_half_hit: 0.0,
+        }
     }
 }
 
@@ -61,6 +79,17 @@ impl Damage {
                 block_normal_hit,
                 block_half_hit,
             }
+    }
+
+    pub fn default() -> Self {
+        Damage {
+            crit_hit: 0,
+            normal_hit: 0,
+            half_hit: 0,
+            block_crit_hit: 0,
+            block_normal_hit: 0,
+            block_half_hit: 0,
+        }
     }
 
     fn into_array(&self) -> [u64; 6] {
@@ -107,7 +136,14 @@ impl Hit {
             }
     }
 
-    pub fn simulate_damage(&self, added_proba: Option<f64>) -> f64 {
+    pub fn default() -> Self {
+        Hit {
+            chance: Chance::default(),
+            damage: Damage::default(),
+        }
+}
+
+    pub fn simulate_damage(&self, added_proba: Option<f64>) -> (f64, HitType) {
         let mut rng = rand::thread_rng();
         let random_value: f64 = rng.gen_range(0.0..1.0);
         let proba = match added_proba {
@@ -123,10 +159,24 @@ impl Hit {
             }
         });
 
-        match choose_hit {
-            ControlFlow::Break(n) => self.damage.get(n) as f64,
-            ControlFlow::Continue(_) => 0.0,
-        }
+        let (n, hit_damage) = match choose_hit {
+            ControlFlow::Break(n) => (n, self.damage.get(n) as f64),
+            ControlFlow::Continue(_) => (6, 0.0),
+        };
+
+        let hit_type = 
+        if hit_damage == 0.0 {
+            HitType::NoHit
+        } else {
+            match n {
+                0 => HitType::CritHit,
+                3 => HitType::CritHit,
+                1 => HitType::NormalHit,
+                4 => HitType::NormalHit,
+                _ => HitType::NoHit,
+            }
+        };
+        (hit_damage, hit_type)
     }
 
     pub fn expected_damage(&self, added_proba: Option<f64>) -> f64 {

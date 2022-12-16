@@ -2,6 +2,8 @@ use std::ops::{Add, AddAssign};
 use serde::{Serialize, Deserialize};
 use crate::hit::{Chance, Damage, Hit};
 use rand::{self, Rng};
+use std::iter::zip;
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy)]
 enum DamageType {
@@ -94,6 +96,7 @@ pub struct Stat {
     head: Option<BobyPart>,
     flat_damage_receive: Option<u64>,
     percent_damage_receive: Option<f64>,
+    can_perform_action: Option<bool>,
 }
 
 impl Stat {
@@ -105,7 +108,23 @@ impl Stat {
         self.counter
     }
 
+    pub fn get_additional_chance(&self) -> HashMap<&str, f64> {
+        let mut additional_chance = HashMap::new();
+        additional_chance.insert("bleeding", self.bleed_chance.unwrap_or(0.0));
+        additional_chance.insert("daze", self.daze_chance.unwrap_or(0.0));
+        additional_chance.insert("stun", self.stun_chance.unwrap_or(0.0));
+        additional_chance.insert("knockback", self.knockback_chance.unwrap_or(0.0));
+        additional_chance.insert("immobilization", self.immobilization_chance.unwrap_or(0.0));
+        additional_chance.insert("stagger", self.stagger_chance.unwrap_or(0.0));
+        additional_chance
+    }
+
     pub fn attack(&self, other: &Stat) -> Option<Hit>{
+        let self_can_perform_action = self.can_perform_action.unwrap_or(true);
+        if !self_can_perform_action {
+            return Some(Hit::default())
+        }
+
         let self_accuracy = self.accuracy?;
         let self_fumble = self.fumble?;
         let self_crit_chance = self.crit_chance.unwrap_or(0.0);
@@ -117,7 +136,7 @@ impl Stat {
         
         let other_dodge = other.dodge.unwrap_or(0.0);
         let other_block = other.block?;
-        let other_block_value = other.block_power?;
+        let other_block_value = other.block_power.unwrap_or(0);
 
         let accuracy = if other_dodge < 0.0 { 
             if self_accuracy - other_dodge > 1.0 {
@@ -185,6 +204,14 @@ impl Stat {
     pub fn residual_damage(&self) -> Option<f64> {
         Some(self.percent_damage_receive.unwrap_or(0.0) * self.hp? as f64 + self.flat_damage_receive.unwrap_or(0) as f64)
     }
+
+    pub fn additional_effect(&self) -> HashMap<&str, bool> {
+        let hash_chance = self.get_additional_chance();
+        let mut arr_proba = [0.0f64; 6];
+        rand::thread_rng().try_fill(&mut arr_proba[..]);
+
+        zip(hash_chance, arr_proba).map(|((s, x), y)| (s, y < x && x > 0.0)).collect::<HashMap<&str, bool>>()
+    }
 }
 
 impl Add for Stat {
@@ -222,6 +249,7 @@ impl Add for Stat {
             head: self.head.add(other.head),
             flat_damage_receive: self.flat_damage_receive.add(other.flat_damage_receive),
             percent_damage_receive: self.percent_damage_receive.add(other.percent_damage_receive),
+            can_perform_action: other.can_perform_action,
         }
     }
 }

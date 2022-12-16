@@ -66,3 +66,35 @@ bleeding:
   effect:
     flat_damage_receive: 3
     percent_damage_receive: 0.01
+
+immobilization:
+  id: immobilization
+  turn: 0
+  effect:
+    dodge: -2
+
+stagger:
+  id: stagger
+  turn: 2
+  effect:
+    counter: -0.5
+    crit_chance: -0.5
+    block: -0.5
+    dodge: -0.5
+    fumble: -0.5
+
+stun:
+  id: stun
+  turn: 2
+  effect:
+    counter: -10
+    block: -10
+    dodge: -10
+    can_perform_action: false
+
+daze:
+  id: daze
+  turn: 5
+  effect:
+    move_res: -0.25
+    control_res: -0.25

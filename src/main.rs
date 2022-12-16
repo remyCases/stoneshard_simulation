@@ -5,9 +5,9 @@ use serde::{Serialize, Deserialize};
 use serde_yaml;
 use std::{fs::File, collections::HashMap, ops::{AddAssign, Add}};
 use stat::Stat;
-use hit::Hit;
+use hit::{Hit, HitType};
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Eq, Hash, Clone, Copy)]
 enum IdSkills {
     warcry_other,
     confusion,
@@ -18,6 +18,11 @@ enum IdSkills {
     disengage_self,
     disengage_other,
     bleeding,
+    daze,
+    stun,
+    knockback,
+    immobilization,
+    stagger,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -30,20 +35,40 @@ struct Skill {
 #[derive(PartialEq, Debug)]
 struct Char<'a> {
     stat: Stat,
-    skills: Vec<&'a Skill>,
+    skills: HashMap<IdSkills, &'a Skill>,
 }
 
-impl Char<'_> {
+impl<'a> Char<'a> {
+    fn clone(&self) -> Self {
+        Char {
+            stat: self.stat.clone(),
+            skills: self.skills.clone(),
+        }
+    }
+
     fn compute(&self)-> Stat {
         let mut raw_stat: Stat = self.stat;
-        for s in self.skills.iter() {
+        for (_, s) in self.skills.iter() {
             raw_stat += s.effect;
         }
         raw_stat
     }
 
     fn remove_outdated_skills(&mut self, turn: &u64) {
-        self.skills.retain(|x| x.turn > *turn || x.turn == 0);
+        self.skills.retain(|_, x| x.turn > *turn || x.turn == 0);
+    }
+
+    fn add_skill(&mut self, skill: &'a Skill) {
+        self.skills.insert(skill.id, skill);
+    }
+
+    fn resolve_hit(&self, other: &mut Char<'a>, skills_map: &'a HashMap<String, Skill>) {
+        let hm = self.stat.additional_effect();
+        for (s, b) in hm.iter() {
+            if *b {
+                other.add_skill(&skills_map[*s]);
+            }
+        }
     }
 }
 
@@ -86,23 +111,73 @@ impl StatSimu {
     }
 }
 
-fn simulate_damage_cycle_attack_via_stat(first :&Stat, second:&Stat) -> Option<[f64; 2]> {
-    let hit_first: Hit = first.attack(second)?;
-    let hit_second: Hit = second.attack(first)?;
+fn simulate_damage_cycle_attack_via_stat<'a>(
+    first :&mut Char<'a>, 
+    second:&mut Char<'a>, 
+    skills_map: &'a HashMap<String, Skill>
+) -> Option<[f64; 2]> 
+{
+    let first_stat = &first.compute();
+    let second_stat = &second.compute();
+    let hit_first: Hit = first_stat.attack(second_stat)?;
+    let hit_second: Hit = second_stat.attack(first_stat)?;
 
-    let damage_first: f64 = hit_first.simulate_damage(None) + hit_first.simulate_damage(first.get_counter());
-    let damage_second: f64 = hit_second.simulate_damage(None) + hit_second.simulate_damage(second.get_counter());
+    let (
+        first_attack, first_hit_type
+    ): (f64, HitType) = hit_first.simulate_damage(None);
+    match first_hit_type {
+        HitType::CritHit => first.resolve_hit(second, skills_map),
+        HitType::NormalHit => first.resolve_hit(second, skills_map),
+        _ => (),
+    };
 
-    Some([damage_first + second.residual_damage()?, 
-        damage_second + first.residual_damage()?])
+    let (
+        second_counter_attack, second_counter_hit_type
+    ): (f64, HitType) = hit_second.simulate_damage(second_stat.get_counter());
+    match second_counter_hit_type {
+        HitType::CritHit => second.resolve_hit(first, skills_map),
+        HitType::NormalHit => second.resolve_hit(first, skills_map),
+        _ => (),
+    };
+
+    let (
+        second_attack, second_hit_type
+    ): (f64, HitType) = hit_second.simulate_damage(None); 
+    match second_hit_type {
+        HitType::CritHit => second.resolve_hit(first, skills_map),
+        HitType::NormalHit => second.resolve_hit(first, skills_map),
+        _ => (),
+    };
+
+    let (
+        first_counter_attack, first_counter_hit_type
+    ): (f64, HitType) =  hit_first.simulate_damage(first_stat.get_counter());
+    match first_counter_hit_type {
+        HitType::CritHit => first.resolve_hit(second, skills_map),
+        HitType::NormalHit => first.resolve_hit(second, skills_map),
+        _ => (),
+    };
+    
+    Some([
+        first_attack + first_counter_attack + second_stat.residual_damage()?, 
+        second_attack + second_counter_attack + first_stat.residual_damage()?
+    ])
 }
 
-fn simulate_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Option<ResultSimulation> {
+fn simulate_damage_n_cycles<'a>(
+    first :& mut Char<'a>, 
+    second:& mut Char<'a>, 
+    n :u64,
+    skills_map: &'a HashMap<String, Skill>
+) -> Option<ResultSimulation> 
+{
     let mut hp_first = first.stat.get_hp()?;
     let mut hp_second = second.stat.get_hp()?;
     let mut count: u64 = 0;
     for _ in 0..n {
-        let [damage_first, damage_second] = simulate_damage_cycle_attack_via_stat(&first.compute(), &second.compute())?;
+        let [damage_first, damage_second] = simulate_damage_cycle_attack_via_stat(
+            first, second, skills_map
+        )?;
         hp_first = if damage_second as u64 > hp_first { 0 } else { hp_first - damage_second as u64 };
         hp_second = if damage_first as u64 > hp_second { 0 } else { hp_second - damage_first as u64 };
         count += 1;
@@ -121,15 +196,28 @@ fn simulate_damage_n_cycles(first :&mut Char, second:&mut Char, n :u64) -> Optio
     )
 }
 
-fn monte_carlo_damage(first: &mut Char, second: &mut Char, n: u64) -> Option<[StatSimu; 3]> {
+fn monte_carlo_damage<'a>(
+    first_data: &Char, 
+    second_data: &Char, 
+    n: u64,
+    skills_map: &'a HashMap<String, Skill>
+) -> Option<[StatSimu; 3]> 
+{
     let mut sum_win: u64 = 0;
     let mut sum_hp_first: u64 = 0;
     let mut sum_hp_second: u64 = 0;
     let mut sumsq_hp_first: u64 = 0;
     let mut sumsq_hp_second: u64 = 0;
     let n_simu: u64 = 10000;
+
     for _ in 0..n_simu {
-        let result_simulation = simulate_damage_n_cycles(first, second, n)?;
+        let mut first = first_data.clone();
+        let mut second = second_data.clone();
+        let result_simulation = simulate_damage_n_cycles(
+            &mut first, 
+            &mut second, 
+            n,
+            skills_map)?;
         sum_win += if result_simulation.first_hp_at_end > 0 {1} else {0};
         sum_hp_first += result_simulation.first_hp_at_end;
         sumsq_hp_first += result_simulation.first_hp_at_end * result_simulation.first_hp_at_end;
@@ -174,32 +262,51 @@ fn main() -> Result<(), serde_yaml::Error> {
     let deserialized_effects: HashMap<String, Skill> = serde_yaml::from_reader(&file_effects).unwrap();
     let deserialized_action: HashMap<String, Vec<String>> = serde_yaml::from_reader(&file_action).unwrap();
 
-    let mut ref_bear: Char = Char { stat: deserialized_enemies["bear"], skills: Vec::<&Skill>::new(), };
-    let mut ref_main: Char = Char { stat: deserialized_chars["main"], skills: Vec::<&Skill>::new(), };
+    let mut ref_bear: Char = Char { 
+        stat: deserialized_enemies["bear"], skills: HashMap::<IdSkills, &Skill>::new(), 
+    };
+    let mut ref_main: Char = Char { 
+        stat: deserialized_chars["main"], skills: HashMap::<IdSkills, &Skill>::new(), 
+    };
 
-    let mut buf_bear: Char = Char { stat: deserialized_enemies["bear"], skills: Vec::<&Skill>::new(), };
-    let mut buf_main: Char = Char { stat: deserialized_chars["main"], skills: Vec::<&Skill>::new(), };
+    let mut buf_bear: Char = Char { 
+        stat: deserialized_enemies["bear"], skills: HashMap::<IdSkills, &Skill>::new(), 
+    };
+    let mut buf_main: Char = Char { 
+        stat: deserialized_chars["main"], skills: HashMap::<IdSkills, &Skill>::new(), 
+    };
 
     for s in deserialized_action["other_ref"].iter() {
-        ref_bear.skills.push(&deserialized_effects[s]);
+        ref_bear.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
     }
     for s in deserialized_action["self_ref"].iter() {
-        ref_main.skills.push(&deserialized_effects[s]);
+        ref_main.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
     }
     for s in deserialized_action["other"].iter() {
-        buf_bear.skills.push(&deserialized_effects[s]);
+        buf_bear.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
     }
     for s in deserialized_action["self"].iter() {
-        buf_main.skills.push(&deserialized_effects[s]);
+        buf_main.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
     }
 
     let max_turn: u64 = 100;
-    let raw_expectation = monte_carlo_damage(&mut ref_bear, &mut ref_main, max_turn);
+    let raw_expectation = monte_carlo_damage(
+        &mut ref_bear, 
+        &mut ref_main, 
+        max_turn, 
+        &deserialized_effects
+    );
     let unwrap_raw = raw_expectation.unwrap();
     for i in 0..3 {
         println!("{:?}", unwrap_raw[i].confident_interval());
     }
-    let after_buf_expectation = monte_carlo_damage(&mut buf_bear, &mut buf_main, max_turn);
+
+    let after_buf_expectation = monte_carlo_damage(
+        &mut buf_bear, 
+        &mut buf_main, 
+        max_turn, 
+        &deserialized_effects
+    );
     let unwrap_buf = after_buf_expectation.unwrap();
     for i in 0..3 {
         println!("{:?}", unwrap_buf[i].confident_interval());
