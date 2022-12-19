@@ -4,26 +4,8 @@ mod hit;
 use serde::{Serialize, Deserialize};
 use serde_yaml;
 use std::{fs::File, collections::HashMap, ops::{AddAssign, Add}};
-use stat::Stat;
-use hit::{Hit, HitType};
-
-#[derive(Serialize, Deserialize, PartialEq, Debug, Eq, Hash, Clone, Copy)]
-enum IdSkills {
-    warcry_other,
-    confusion,
-    warcry_self,
-    fencer_stance,
-    seized_initiative,
-    loss_initiative,
-    disengage_self,
-    disengage_other,
-    bleeding,
-    daze,
-    stun,
-    knockback,
-    immobilization,
-    stagger,
-}
+use stat::{Stat, IdSkills};
+use hit::{Hit, HitType, BodyPart};
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Skill {
@@ -62,11 +44,11 @@ impl<'a> Char<'a> {
         self.skills.insert(skill.id, skill);
     }
 
-    fn resolve_hit(&self, other: &mut Char<'a>, skills_map: &'a HashMap<String, Skill>) {
-        let hm = self.stat.additional_effect();
+    fn resolve_hit(&self, other: &mut Char<'a>, skills_map: &'a HashMap<IdSkills, Skill>, bodypart_hit :BodyPart, is_crit: bool) {
+        let hm = self.stat.additional_effect( &other.stat, bodypart_hit, is_crit);
         for (s, b) in hm.iter() {
             if *b {
-                other.add_skill(&skills_map[*s]);
+                other.add_skill(&skills_map[s]);
             }
         }
     }
@@ -114,20 +96,20 @@ impl StatSimu {
 fn simulate_damage_cycle_attack_via_stat<'a>(
     first :&mut Char<'a>, 
     second:&mut Char<'a>, 
-    skills_map: &'a HashMap<String, Skill>
+    skills_map: &'a HashMap<IdSkills, Skill>
 ) -> Option<[f64; 2]> 
 {
     let first_stat = &first.compute();
     let second_stat = &second.compute();
-    let hit_first: Hit = first_stat.attack(second_stat)?;
-    let hit_second: Hit = second_stat.attack(first_stat)?;
+    let hit_first: Hit = first_stat.attack(second_stat);
+    let hit_second: Hit = second_stat.attack(first_stat);
 
     let (
         first_attack, first_hit_type
     ): (f64, HitType) = hit_first.simulate_damage(None);
     match first_hit_type {
-        HitType::CritHit => first.resolve_hit(second, skills_map),
-        HitType::NormalHit => first.resolve_hit(second, skills_map),
+        HitType::CritHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), true),
+        HitType::NormalHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), false),
         _ => (),
     };
 
@@ -135,8 +117,8 @@ fn simulate_damage_cycle_attack_via_stat<'a>(
         second_counter_attack, second_counter_hit_type
     ): (f64, HitType) = hit_second.simulate_damage(second_stat.get_counter());
     match second_counter_hit_type {
-        HitType::CritHit => second.resolve_hit(first, skills_map),
-        HitType::NormalHit => second.resolve_hit(first, skills_map),
+        HitType::CritHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), true),
+        HitType::NormalHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), false),
         _ => (),
     };
 
@@ -144,8 +126,8 @@ fn simulate_damage_cycle_attack_via_stat<'a>(
         second_attack, second_hit_type
     ): (f64, HitType) = hit_second.simulate_damage(None); 
     match second_hit_type {
-        HitType::CritHit => second.resolve_hit(first, skills_map),
-        HitType::NormalHit => second.resolve_hit(first, skills_map),
+        HitType::CritHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), true),
+        HitType::NormalHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), false),
         _ => (),
     };
 
@@ -153,14 +135,14 @@ fn simulate_damage_cycle_attack_via_stat<'a>(
         first_counter_attack, first_counter_hit_type
     ): (f64, HitType) =  hit_first.simulate_damage(first_stat.get_counter());
     match first_counter_hit_type {
-        HitType::CritHit => first.resolve_hit(second, skills_map),
-        HitType::NormalHit => first.resolve_hit(second, skills_map),
+        HitType::CritHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), true),
+        HitType::NormalHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), false),
         _ => (),
     };
     
     Some([
-        first_attack + first_counter_attack + second_stat.residual_damage()?, 
-        second_attack + second_counter_attack + first_stat.residual_damage()?
+        first_attack + first_counter_attack + second_stat.residual_damage(), 
+        second_attack + second_counter_attack + first_stat.residual_damage()
     ])
 }
 
@@ -168,7 +150,7 @@ fn simulate_damage_n_cycles<'a>(
     first :& mut Char<'a>, 
     second:& mut Char<'a>, 
     n :u64,
-    skills_map: &'a HashMap<String, Skill>
+    skills_map: &'a HashMap<IdSkills, Skill>
 ) -> Option<ResultSimulation> 
 {
     let mut hp_first = first.stat.get_hp()?;
@@ -200,7 +182,7 @@ fn monte_carlo_damage<'a>(
     first_data: &Char, 
     second_data: &Char, 
     n: u64,
-    skills_map: &'a HashMap<String, Skill>
+    skills_map: &'a HashMap<IdSkills, Skill>
 ) -> Option<[StatSimu; 3]> 
 {
     let mut sum_win: u64 = 0;
@@ -259,14 +241,14 @@ fn main() -> Result<(), serde_yaml::Error> {
 
     let deserialized_enemies: HashMap<String, Stat> = serde_yaml::from_reader(&file_enemies).unwrap();
     let deserialized_chars: HashMap<String, Stat> = serde_yaml::from_reader(&file_chars).unwrap();
-    let deserialized_effects: HashMap<String, Skill> = serde_yaml::from_reader(&file_effects).unwrap();
-    let deserialized_action: HashMap<String, Vec<String>> = serde_yaml::from_reader(&file_action).unwrap();
+    let deserialized_effects: HashMap<IdSkills, Skill> = serde_yaml::from_reader(&file_effects).unwrap();
+    let deserialized_action: HashMap<String, Vec<IdSkills>> = serde_yaml::from_reader(&file_action).unwrap();
 
     let mut ref_bear: Char = Char { 
         stat: deserialized_enemies["bear"], skills: HashMap::<IdSkills, &Skill>::new(), 
     };
     let mut ref_main: Char = Char { 
-        stat: deserialized_chars["main"], skills: HashMap::<IdSkills, &Skill>::new(), 
+        stat: deserialized_chars["main_rot"], skills: HashMap::<IdSkills, &Skill>::new(), 
     };
 
     let mut buf_bear: Char = Char { 

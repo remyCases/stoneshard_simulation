@@ -1,14 +1,15 @@
 main: 
   hp: 100
   damage: 21
-  damage_type: slash
+  damage_type: Slash
+  weapon_type: Sword
   weapon_dmg: 1.1
   main_hand_eff: 1.08
   armor_pen: 0.23
   accuracy: 0.888
   crit_chance: 0.16
   crit_eff: 1.48
-  counter: 0.515
+  counter: 0.545
   fumble: 0.0
   bleed_chance: 0.05
   daze_chance: 0.0
@@ -18,10 +19,10 @@ main:
   stagger_chance: 0.0
   block: 0.225
   block_power: 29
-  dodge: 0.52
+  dodge: 0.54
   fortitude: 0.15
   control_res: 0.05
-  move_res: 0.43
+  move_res: 0.31
   damage_taken: 0.97
   head: 
     protection: 5
@@ -49,9 +50,68 @@ main:
     bleed_res: 0.18
   legs:
     protection: 6
+    phy_res: 0.14
+    slash_res: 0.14
+    pierc_res: 0.14
+    crush_res: 0.14
+    rend_res: 0.19
+    bleed_res: 0.48
+
+main_rot: 
+  hp: 100
+  damage: 21
+  damage_type: Slash
+  weapon_type: Sword
+  weapon_dmg: 1.25
+  main_hand_eff: 1.114
+  armor_pen: 0.34
+  accuracy: 0.941
+  crit_chance: 0.16
+  crit_eff: 1.48
+  counter: 0.445
+  fumble: 0.0
+  bleed_chance: 0.05
+  daze_chance: 0.0
+  stun_chance: 0.0
+  knockback_chance: 0.0
+  immobilization_chance: 0.0
+  stagger_chance: 0.0
+  block: 0.075
+  block_power: 19
+  dodge: 0.54
+  fortitude: 0.15
+  control_res: 0.05
+  move_res: 0.31
+  damage_taken: 0.97
+  head: 
+    protection: 5
     phy_res: 0.16
     slash_res: 0.16
     pierc_res: 0.16
-    crush_res: 0.16
+    crush_res: 0.21
     rend_res: 0.21
-    bleed_res: 0.43
+    bleed_res: 0.46
+  torso: 
+    protection: 5
+    phy_res: 0.13
+    slash_res: 0.13
+    pierc_res: 0.13
+    crush_res: 0.16
+    rend_res: 0.18
+    bleed_res: 0.28
+  hands:
+    protection: 5
+    phy_res: 0.16
+    slash_res: 0.16
+    pierc_res: 0.16
+    crush_res: 0.21
+    rend_res: 0.21
+    bleed_res: 0.18
+  legs:
+    protection: 6
+    phy_res: 0.14
+    slash_res: 0.14
+    pierc_res: 0.14
+    crush_res: 0.14
+    rend_res: 0.19
+    bleed_res: 0.48
