@@ -1,9 +1,9 @@
 use std::ops::{Add, AddAssign};
 use serde::{Serialize, Deserialize};
-use crate::hit::{Chance, Damage, BodyPart, Hit};
+use crate::hit::{Chance, HitType, BodyPart, Hit};
 use rand::{self, Rng};
-use std::iter::zip;
 use std::collections::HashMap;
+use std::iter::zip;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Eq, Hash, Clone, Copy)]
 pub enum IdSkills {
@@ -21,6 +21,8 @@ pub enum IdSkills {
     Knockback,
     Immobilization,
     Stagger,
+    Poisoning,
+    AcidBath,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy)]
@@ -29,6 +31,21 @@ enum DamageType {
     Pierc,
     Crush,
     Rend,
+    Poison,
+    Caustic,
+}
+
+impl DamageType {
+    fn is_magic(self) -> bool {
+        match self {
+            DamageType::Slash => false,
+            DamageType::Pierc => false,
+            DamageType::Crush => false,
+            DamageType::Rend => false,
+            DamageType::Poison => true,
+            DamageType::Caustic => true,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy)]
@@ -90,6 +107,8 @@ pub struct BobyPart {
     pierc_res: Option<f64>,
     crush_res: Option<f64>,
     rend_res: Option<f64>,
+    poison_res: Option<f64>,
+    caustic_res: Option<f64>,
     bleed_res: Option<f64>,
 }
 
@@ -104,6 +123,8 @@ impl Add for BobyPart {
             pierc_res: self.pierc_res.add(other.pierc_res),
             crush_res: self.crush_res.add(other.crush_res),
             rend_res: self.rend_res.add(other.rend_res),
+            poison_res: self.poison_res.add(other.poison_res),
+            caustic_res: self.caustic_res.add(other.caustic_res),
             bleed_res: self.bleed_res.add(other.bleed_res),
         }
     }
@@ -116,11 +137,10 @@ impl AddAssign for BobyPart {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Stat {
     hp: Option<u64>,
-    damage: Option<u64>,
-    damage_type: Option<DamageType>,
+    damage: Option<Vec<(DamageType, u64)>>,
     weapon_type: Option<WeaponType>,
     weapon_dmg: Option<f64>,
     main_hand_eff: Option<f64>,
@@ -138,6 +158,7 @@ pub struct Stat {
     stagger_chance: Option<f64>,
     block: Option<f64>,
     block_power: Option<u64>,
+    block_recovery: Option<f64>,
     dodge: Option<f64>,
     fortitude: Option<f64>,
     control_res: Option<f64>,
@@ -155,6 +176,14 @@ pub struct Stat {
 impl Stat {
     pub fn get_hp(&self) -> Option<u64> {
         self.hp
+    }
+
+    pub fn get_block(&self) -> Option<u64> {
+        self.block_power
+    }
+
+    pub fn get_block_recovery(&self) -> Option<f64> {
+        self.block_recovery
     }
 
     pub fn get_counter(&self) -> Option<f64> {
@@ -197,22 +226,15 @@ impl Stat {
         if !self_can_perform_action {
 
             let chance = Chance::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-            let damage = Damage::new(0, 0, 0, 0, 0, 0);
+            Hit::new(chance, BodyPart::None)
 
-            Hit::new(chance, damage, BodyPart::None)
         } else {
             let self_accuracy = self.accuracy.unwrap_or(1.0);
             let self_fumble = self.fumble.unwrap_or(0.0);
             let self_crit_chance = self.crit_chance.unwrap_or(0.0);
-            let self_crit_eff = self.crit_eff.unwrap_or(1.0);
-            let self_armor_pen = self.armor_pen.unwrap_or(0.0);
-            let self_weapon_dmg = self.weapon_dmg.unwrap_or(1.0);
-            let self_main_hand_eff = self.main_hand_eff.unwrap_or(1.0);
-            let self_damage = self.damage.unwrap_or(0);
 
             let other_dodge = other.dodge.unwrap_or(0.0);
             let other_block = other.block.unwrap_or(0.0);
-            let other_block_value = other.block_power.unwrap_or(0);
 
             // below 0 dodge increases other accuracy
             let accuracy = if other_dodge < 0.0 { 
@@ -234,7 +256,7 @@ impl Stat {
 
             // above 1 accuracy decreases other dodge
             // dodge cant go below 0
-            let dodge = if other_dodge < 0.0 { 
+            let dodge = if other_dodge <= 0.0 { 
                 0.0 
             } else {
                 if self_accuracy > 1.0 {
@@ -257,36 +279,10 @@ impl Stat {
                 }
             };
             let fumble = if self_fumble < 0.0 { 0.0 } else { if self_fumble > 1.0 { 1.0 } else { self_fumble } };
-            let damage = (self_weapon_dmg * self_main_hand_eff * self_damage as f64) as u64;
             let half_hit = accuracy * (1.0 - fumble) * dodge + accuracy * fumble * (1.0 - dodge);
             let normal_hit = accuracy * (1.0 - fumble) * (1.0 - dodge) * (1.0 - self_crit_chance);
             let crit_hit = accuracy * (1.0 - fumble) * (1.0 - dodge) * self_crit_chance;
 
-            let crit_eff = if self_crit_eff < 1.0 {1.0} else {self_crit_eff};
-            let crit_damage = (damage as f64 * crit_eff) as u64;
-
-            let mut rng = rand::thread_rng();
-            let (body_part, other_body_part_option) = match rng.gen_range(0..6) {
-                0 => (BodyPart::RightLeg, other.legs),
-                1 => (BodyPart::LeftLeg, other.legs),
-                2 => (BodyPart::RightHand, other.hands),
-                3 => (BodyPart::LeftHand, other.hands),
-                4 => (BodyPart::Torso, other.torso),
-                5 => (BodyPart::Head, other.head),
-                _ => (BodyPart::None, None),
-            };
-
-            let other_body_part = other_body_part_option.unwrap();
-
-            let flat_damage_reduction = (other_body_part.protection.unwrap_or(0) as f64 * (1.0 - self_armor_pen)) as u64;
-            let percent_damage_reduction = other.damage_taken.unwrap_or(1.0) * 
-            (1.0 - match self.damage_type.unwrap_or(DamageType::Rend) {
-                DamageType::Slash => other_body_part.slash_res.unwrap_or(0.0),
-                DamageType::Pierc => other_body_part.pierc_res.unwrap_or(0.0),
-                DamageType::Crush => other_body_part.crush_res.unwrap_or(0.0),
-                DamageType::Rend => other_body_part.rend_res.unwrap_or(0.0),
-            });
-            
             let chance = Chance::new(
                 crit_hit * (1.0 - other_block),
                 normal_hit * (1.0 - other_block),
@@ -295,16 +291,120 @@ impl Stat {
                 normal_hit * other_block,
                 half_hit * other_block
             );
-            let dmg = Damage::new(
-                if crit_damage > flat_damage_reduction {((crit_damage - flat_damage_reduction) as f64 * percent_damage_reduction) as u64} else {0},
-                if damage > flat_damage_reduction {((damage - flat_damage_reduction) as f64 * percent_damage_reduction) as u64} else {0},
-                if damage / 2 > flat_damage_reduction {((damage / 2 - flat_damage_reduction) as f64 * percent_damage_reduction) as u64} else {0},
-                if crit_damage > other_block_value + flat_damage_reduction {((crit_damage - other_block_value - flat_damage_reduction) as f64 * percent_damage_reduction) as u64} else {0},
-                if damage > other_block_value + flat_damage_reduction {((damage - other_block_value - flat_damage_reduction) as f64 * percent_damage_reduction) as u64} else {0},
-                if damage / 2 > other_block_value + flat_damage_reduction {((damage / 2 - other_block_value - flat_damage_reduction) as f64 * percent_damage_reduction) as u64} else {0}
-            );
-            Hit::new(chance, dmg, body_part)
+
+            let mut rng = rand::thread_rng();
+            let body_part = match rng.gen_range(0..6) {
+                0 => BodyPart::RightLeg,
+                1 => BodyPart::LeftLeg,
+                2 => BodyPart::RightHand,
+                3 => BodyPart::LeftHand,
+                4 => BodyPart::Torso,
+                5 => BodyPart::Head,
+                _ => BodyPart::None,
+            };
+            
+            Hit::new(chance, body_part)
         }  
+    }
+
+    pub fn get_damage(
+        &self, other: &Stat, body_part: BodyPart, hit_type: HitType, other_block_value: u64
+    ) -> (f64, f64) {
+
+        match hit_type {
+            HitType::NoHit => return (0.0, 0.0),
+            _ => (),
+        };
+
+        let self_crit_eff = self.crit_eff.unwrap_or(1.0);
+        let self_armor_pen = self.armor_pen.unwrap_or(0.0);
+        let self_weapon_dmg = self.weapon_dmg.unwrap_or(1.0);
+        let self_main_hand_eff = self.main_hand_eff.unwrap_or(1.0);
+
+        let self_damage = self.damage.clone().unwrap_or(vec![(DamageType::Rend, 0)]);
+
+        let other_body_part = match body_part {
+            BodyPart::RightLeg => other.legs,
+            BodyPart::LeftLeg => other.legs,
+            BodyPart::RightHand => other.hands,
+            BodyPart::LeftHand => other.hands,
+            BodyPart::Torso => other.torso,
+            BodyPart::Head => other.head,
+            BodyPart::None => other.torso,
+        }.unwrap();
+
+        let mut damage = 0;
+        let crit_eff = if self_crit_eff < 1.0 {1.0} else {self_crit_eff};
+        let normal_mult_damage = self_weapon_dmg * self_main_hand_eff;
+
+        let mult_damage = match hit_type {
+            HitType::CritHit => normal_mult_damage * crit_eff,
+            HitType::BlockCritHit => normal_mult_damage * crit_eff,
+            HitType::NormalHit => normal_mult_damage,
+            HitType::BlockNormalHit => normal_mult_damage,
+            HitType::HalfHit => normal_mult_damage / 2.0,
+            HitType::BlockHalfHit => normal_mult_damage / 2.0,
+            _ => 0.0,
+        };
+
+        let mut flat_dmg_red = (other_body_part.protection.unwrap_or(0) as f64 * (1.0 - self_armor_pen)) as u64;
+        let mut block = match hit_type {
+            HitType::BlockCritHit => other_block_value,
+            HitType::BlockNormalHit => other_block_value,
+            HitType::BlockHalfHit => other_block_value,
+            _ => 0,
+        };
+
+        for (t, d) in self_damage {
+            let t_is_magic = t.is_magic();
+    
+            let current_dmg = 
+            match t_is_magic {
+                false =>(d as f64 * mult_damage) as u64,
+                _ => d,
+            };
+
+            let apply_flat_dmg_red = 
+            match t_is_magic {
+                false => flat_dmg_red,
+                _ => flat_dmg_red / 2,
+            };
+
+            let apply_block = 
+            match t_is_magic {
+                false => block,
+                _ => block / 2,
+            };
+
+            let percent_damage_reduction = 
+            match t {
+                DamageType::Slash => (1.0 - other_body_part.slash_res.unwrap_or(0.0)) * other.damage_taken.unwrap_or(1.0),
+                DamageType::Pierc => (1.0 - other_body_part.pierc_res.unwrap_or(0.0)) * other.damage_taken.unwrap_or(1.0),
+                DamageType::Crush => (1.0 - other_body_part.crush_res.unwrap_or(0.0)) * other.damage_taken.unwrap_or(1.0),
+                DamageType::Rend => (1.0 - other_body_part.rend_res.unwrap_or(0.0)) * other.damage_taken.unwrap_or(1.0),
+                DamageType::Poison => (1.0 - other_body_part.poison_res.unwrap_or(0.0)) * other.damage_taken.unwrap_or(1.0),
+                DamageType::Caustic => (1.0 - other_body_part.caustic_res.unwrap_or(0.0)) * other.damage_taken.unwrap_or(1.0),
+            };
+
+            damage += if apply_block + apply_flat_dmg_red > current_dmg { 0 } else {
+                ((current_dmg - apply_block - apply_flat_dmg_red) as f64 * percent_damage_reduction) as u64
+            };
+
+            if current_dmg > block { 
+                flat_dmg_red = if current_dmg - block > flat_dmg_red { 0 } else { flat_dmg_red + block - current_dmg };
+                block = 0;
+            } else { 
+                block = block - current_dmg;
+            }
+        };
+
+        let dmg_block = match hit_type {
+            HitType::BlockCritHit => (other_block_value - block) as f64,
+            HitType::BlockNormalHit => (other_block_value - block) as f64,
+            HitType::BlockHalfHit => (other_block_value - block) as f64,
+            _ => 0.0,
+        };
+        (damage as f64, dmg_block)
     }
 
     pub fn residual_damage(&self) -> f64 {
@@ -339,8 +439,7 @@ impl Add for Stat {
     fn add(self, other: Stat) -> Stat {
         Stat{
             hp: self.hp.add(other.hp),
-            damage: self.damage.add(other.damage),
-            damage_type: self.damage_type,
+            damage: self.damage,
             weapon_type: self.weapon_type,
             weapon_dmg: self.weapon_dmg.add(other.weapon_dmg),
             main_hand_eff: self.main_hand_eff.add(other.main_hand_eff),
@@ -358,6 +457,7 @@ impl Add for Stat {
             stagger_chance: self.stagger_chance.add(other.stagger_chance),
             block: self.block.add(other.block),
             block_power: self.block_power.add(other.block_power),
+            block_recovery: self.block_recovery.add(other.block_recovery),
             dodge: self.dodge.add(other.dodge),
             fortitude: self.fortitude.add(other.fortitude),
             control_res: self.control_res.add(other.control_res),
@@ -376,7 +476,7 @@ impl Add for Stat {
 
 impl AddAssign for Stat {
     fn add_assign(&mut self, other: Stat) {
-        let add_self: Stat = *self + other; 
+        let add_self: Stat = self.clone() + other; 
         *self = add_self
     }
 }
@@ -396,13 +496,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(1.0),
             main_hand_eff: Some(1.0),
@@ -420,6 +521,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(0.0),
             block_power: Some(0),
+            block_recovery: Some(0.0),
             dodge: Some(0.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -438,7 +540,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(damage, damage, damage/2, damage, damage, damage/2));
     }
 
     #[test]
@@ -453,13 +554,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(1.0),
             main_hand_eff: Some(1.0),
@@ -477,6 +579,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(0.0),
             block_power: Some(0),
+            block_recovery: Some(0.0),
             dodge: Some(0.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -495,10 +598,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (damage as f64 * crit_eff) as u64, damage, damage/2, 
-            (damage as f64 * crit_eff) as u64, damage, damage/2)
-        );
     }
 
     #[test]
@@ -513,13 +612,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(1.0),
             main_hand_eff: Some(1.0),
@@ -537,6 +637,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(0.0),
             block_power: Some(0),
+            block_recovery: Some(0.0),
             dodge: Some(0.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -555,10 +656,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 0.0, 1.0, 0.0, 0.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (damage as f64 * crit_eff) as u64, damage, damage/2, 
-            (damage as f64 * crit_eff) as u64, damage, damage/2)
-        );
     }
 
     #[test]
@@ -573,13 +670,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(1.0),
             main_hand_eff: Some(1.0),
@@ -597,6 +695,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(0.0),
             block_power: Some(0),
+            block_recovery: Some(0.0),
             dodge: Some(1.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -615,10 +714,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 0.0, 1.0, 0.0, 0.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (damage as f64 * crit_eff) as u64, damage, damage/2, 
-            (damage as f64 * crit_eff) as u64, damage, damage/2)
-        );
     }
 
     #[test]
@@ -633,13 +728,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(1.0),
             main_hand_eff: Some(1.0),
@@ -657,6 +753,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(0.0),
             block_power: Some(0),
+            block_recovery: Some(0.0),
             dodge: Some(1.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -675,10 +772,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (damage as f64 * crit_eff) as u64, damage, damage/2, 
-            (damage as f64 * crit_eff) as u64, damage, damage/2)
-        );
     }
 
     #[test]
@@ -695,13 +788,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(1.0),
             main_hand_eff: Some(1.0),
@@ -719,6 +813,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(1.0),
             block_power: Some(block_power),
+            block_recovery: Some(0.0),
             dodge: Some(0.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -737,10 +832,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 0.0, 0.0, 0.0, 1.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (damage as f64 * crit_eff) as u64, damage, damage/2, 
-            (damage as f64 * crit_eff) as u64 - block_power, damage - block_power, damage/2 - block_power)
-        );
     }
 
     #[test]
@@ -760,13 +851,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(base_damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(weapon_dmg),
             main_hand_eff: Some(main_hand_eff),
@@ -784,6 +876,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(1.0),
             block_power: Some(block_power),
+            block_recovery: Some(0.0),
             dodge: Some(0.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -802,10 +895,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 0.0, 0.0, 0.0, 1.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (damage as f64 * crit_eff) as u64, damage, damage/2, 
-            (damage as f64 * crit_eff) as u64 - block_power, damage - block_power, damage/2 - block_power)
-        );
     }
 
     #[test]
@@ -826,13 +915,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(base_damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(weapon_dmg),
             main_hand_eff: Some(main_hand_eff),
@@ -850,6 +940,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(1.0),
             block_power: Some(block_power),
+            block_recovery: Some(0.0),
             dodge: Some(0.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -868,10 +959,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 0.0, 0.0, 0.0, 1.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (damage as f64 * crit_eff) as u64 - protection, damage - protection, damage/2 - protection, 
-            (damage as f64 * crit_eff) as u64 - block_power - protection, damage - block_power - protection, 0)
-        );
     }
 
     #[test]
@@ -893,13 +980,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
 
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(base_damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(weapon_dmg),
             main_hand_eff: Some(main_hand_eff),
@@ -917,6 +1005,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(1.0),
             block_power: Some(block_power),
+            block_recovery: Some(0.0),
             dodge: Some(0.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -935,14 +1024,6 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 0.0, 0.0, 0.0, 1.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (((damage as f64 * crit_eff) as u64 - protection) as f64 * slash_res) as u64, 
-            ((damage - protection) as f64 * slash_res) as u64, 
-            ((damage/2 - protection) as f64 * slash_res) as u64, 
-            (((damage as f64 * crit_eff) as u64 - block_power - protection) as f64 * slash_res) as u64, 
-            ((damage - block_power - protection) as f64 * slash_res) as u64, 
-            0)
-        );
     }
 
     #[test]
@@ -966,13 +1047,14 @@ mod tests {
             crush_res: Some(0.0),
             rend_res: Some(0.0),
             bleed_res: Some(0.0),
+            poison_res: Some(0.0),
+            caustic_res: Some(0.0),
         };
  
         let player_stats = Stat
         {
             hp: Some(100),
-            damage: Some(base_damage),
-            damage_type: Some(DamageType::Slash),
+            damage: Some(vec![(DamageType::Slash, damage)]),
             weapon_type: Some(WeaponType::Sword),
             weapon_dmg: Some(weapon_dmg),
             main_hand_eff: Some(main_hand_eff),
@@ -990,6 +1072,7 @@ mod tests {
             stagger_chance: Some(0.0),
             block: Some(1.0),
             block_power: Some(block_power),
+            block_recovery: Some(0.0),
             dodge: Some(0.0),
             fortitude: Some(0.0),
             control_res: Some(0.0),
@@ -1008,13 +1091,5 @@ mod tests {
         let hit_player = player_stats.attack(&dummy_stat);
         
         assert_eq!(hit_player.get_chance(), Chance::new(0.0, 0.0, 0.0, 0.0, 1.0, 0.0));
-        assert_eq!(hit_player.get_damage(), Damage::new(
-            (((damage as f64 * crit_eff) as u64 - protection) as f64 * slash_res) as u64, 
-            ((damage - protection) as f64 * slash_res) as u64, 
-            ((damage/2 - protection) as f64 * slash_res) as u64, 
-            (((damage as f64 * crit_eff) as u64 - block_power - protection) as f64 * slash_res) as u64, 
-            ((damage - block_power - protection) as f64 * slash_res) as u64, 
-            0)
-        );
     }
 }

@@ -29,9 +29,9 @@ impl<'a> Char<'a> {
     }
 
     fn compute(&self)-> Stat {
-        let mut raw_stat: Stat = self.stat;
+        let mut raw_stat: Stat = self.stat.clone();
         for (_, s) in self.skills.iter() {
-            raw_stat += s.effect;
+            raw_stat += s.effect.clone();
         }
         raw_stat
     }
@@ -94,55 +94,83 @@ impl StatSimu {
 }
 
 fn simulate_damage_cycle_attack_via_stat<'a>(
-    first :&mut Char<'a>, 
-    second:&mut Char<'a>, 
+    first: &mut Char<'a>, 
+    second: &mut Char<'a>, 
+    block_first: u64, 
+    block_second: u64, 
     skills_map: &'a HashMap<IdSkills, Skill>
-) -> Option<[f64; 2]> 
+) -> Option<[f64; 4]> 
 {
     let first_stat = &first.compute();
     let second_stat = &second.compute();
     let hit_first: Hit = first_stat.attack(second_stat);
     let hit_second: Hit = second_stat.attack(first_stat);
 
-    let (
-        first_attack, first_hit_type
-    ): (f64, HitType) = hit_first.simulate_damage(None);
+    let first_hit_type: HitType = hit_first.draw(None);
+    let (first_dmg, second_dmg_block) = first_stat.get_damage(
+        second_stat, 
+        hit_first.get_bodypart_hit(), 
+        first_hit_type, 
+        block_second
+    );
     match first_hit_type {
         HitType::CritHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), true),
         HitType::NormalHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), false),
+        HitType::BlockCritHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), true),
+        HitType::BlockNormalHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), false),
         _ => (),
     };
 
-    let (
-        second_counter_attack, second_counter_hit_type
-    ): (f64, HitType) = hit_second.simulate_damage(second_stat.get_counter());
+    let second_counter_hit_type: HitType = hit_second.draw(second_stat.get_counter());
+    let (second_counter_dmg, first_counter_dmg_block) = second_stat.get_damage(
+        first_stat, 
+        hit_second.get_bodypart_hit(), 
+        second_counter_hit_type, 
+        block_first
+    );
     match second_counter_hit_type {
         HitType::CritHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), true),
         HitType::NormalHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), false),
+        HitType::BlockCritHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), true),
+        HitType::BlockNormalHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), false),
         _ => (),
     };
 
-    let (
-        second_attack, second_hit_type
-    ): (f64, HitType) = hit_second.simulate_damage(None); 
+    let second_hit_type: HitType = hit_second.draw(None);
+    let (second_dmg, first_dmg_block) = second_stat.get_damage(
+        first_stat, 
+        hit_second.get_bodypart_hit(), 
+        second_hit_type, 
+        block_first - first_counter_dmg_block as u64
+    );
     match second_hit_type {
         HitType::CritHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), true),
         HitType::NormalHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), false),
+        HitType::BlockCritHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), true),
+        HitType::BlockNormalHit => second.resolve_hit(first, skills_map, hit_second.get_bodypart_hit(), false),
         _ => (),
     };
 
-    let (
-        first_counter_attack, first_counter_hit_type
-    ): (f64, HitType) =  hit_first.simulate_damage(first_stat.get_counter());
+    let first_counter_hit_type: HitType = hit_first.draw(first_stat.get_counter());
+    let (first_counter_dmg, second_counter_dmg_block) = first_stat.get_damage(
+        second_stat, 
+        hit_first.get_bodypart_hit(), 
+        first_hit_type, 
+        block_second - second_dmg_block as u64
+    );
     match first_counter_hit_type {
         HitType::CritHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), true),
         HitType::NormalHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), false),
+        HitType::BlockCritHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), true),
+        HitType::BlockNormalHit => first.resolve_hit(second, skills_map, hit_first.get_bodypart_hit(), false),
         _ => (),
     };
     
     Some([
-        first_attack + first_counter_attack + second_stat.residual_damage(), 
-        second_attack + second_counter_attack + first_stat.residual_damage()
+        first_dmg + first_counter_dmg + second_stat.residual_damage(), 
+        second_dmg + second_counter_dmg + first_stat.residual_damage(),
+        first_dmg_block + first_counter_dmg_block,
+        second_dmg_block + second_counter_dmg_block,
     ])
 }
 
@@ -155,13 +183,21 @@ fn simulate_damage_n_cycles<'a>(
 {
     let mut hp_first = first.stat.get_hp()?;
     let mut hp_second = second.stat.get_hp()?;
+    let mut block_first = first.stat.get_block()?;
+    let mut block_second = second.stat.get_block()?;
     let mut count: u64 = 0;
     for _ in 0..n {
-        let [damage_first, damage_second] = simulate_damage_cycle_attack_via_stat(
-            first, second, skills_map
+        let [
+            damage_first, damage_second, 
+            damage_block_first, damage_block_second
+        ] = simulate_damage_cycle_attack_via_stat(
+            first, second, block_first, block_second, skills_map
         )?;
         hp_first = if damage_second as u64 > hp_first { 0 } else { hp_first - damage_second as u64 };
         hp_second = if damage_first as u64 > hp_second { 0 } else { hp_second - damage_first as u64 };
+        block_first = if damage_block_second as u64 > block_first { 0 } else { block_first - damage_block_second as u64 };
+        block_second = if damage_block_first as u64 > block_second { 0 } else { block_second - damage_block_first as u64 };
+        
         count += 1;
         first.remove_outdated_skills(&count);
         second.remove_outdated_skills(&count);
@@ -169,6 +205,11 @@ fn simulate_damage_n_cycles<'a>(
         if hp_first == 0 || hp_second == 0 {
             break;
         }
+
+        block_first += (block_first as f64 * first.stat.get_block_recovery().unwrap_or(0.0)) as u64;
+        if block_first > first.stat.get_block()? { block_first = first.stat.get_block()?}
+        block_second += (block_second as f64 * second.stat.get_block_recovery().unwrap_or(0.0)) as u64;
+        if block_second > second.stat.get_block()? { block_second = second.stat.get_block()?}
     }
 
     Some(ResultSimulation { 
@@ -245,17 +286,17 @@ fn main() -> Result<(), serde_yaml::Error> {
     let deserialized_action: HashMap<String, Vec<IdSkills>> = serde_yaml::from_reader(&file_action).unwrap();
 
     let mut ref_bear: Char = Char { 
-        stat: deserialized_enemies["bear"], skills: HashMap::<IdSkills, &Skill>::new(), 
+        stat: deserialized_enemies["crawler"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
     };
     let mut ref_main: Char = Char { 
-        stat: deserialized_chars["main_rot"], skills: HashMap::<IdSkills, &Skill>::new(), 
+        stat: deserialized_chars["main_rot"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
     };
 
     let mut buf_bear: Char = Char { 
-        stat: deserialized_enemies["bear"], skills: HashMap::<IdSkills, &Skill>::new(), 
+        stat: deserialized_enemies["crawler"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
     };
     let mut buf_main: Char = Char { 
-        stat: deserialized_chars["main"], skills: HashMap::<IdSkills, &Skill>::new(), 
+        stat: deserialized_chars["main"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
     };
 
     for s in deserialized_action["other_ref"].iter() {

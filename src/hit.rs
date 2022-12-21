@@ -60,17 +60,17 @@ impl Chance {
             None => 1.0,
         };
 
-        if self.crit_hit > random_value / added_proba {
+        if self.crit_hit * added_proba > random_value  {
             HitType::CritHit
-        } else if self.crit_hit + self.normal_hit > random_value / added_proba {
+        } else if (self.crit_hit + self.normal_hit) * added_proba > random_value  {
             HitType::NormalHit
-        } else if self.crit_hit + self.normal_hit + self.half_hit > random_value / added_proba {
+        } else if (self.crit_hit + self.normal_hit + self.half_hit) * added_proba > random_value {
             HitType::HalfHit
-        } else if self.crit_hit + self.normal_hit + self.half_hit + self.block_crit_hit > random_value / added_proba {
+        } else if (self.crit_hit + self.normal_hit + self.half_hit + self.block_crit_hit) * added_proba > random_value {
             HitType::BlockCritHit
-        } else if self.crit_hit + self.normal_hit + self.half_hit + self.block_crit_hit + self.block_normal_hit > random_value / added_proba {
+        } else if (self.crit_hit + self.normal_hit + self.half_hit + self.block_crit_hit + self.block_normal_hit) * added_proba > random_value {
             HitType::BlockNormalHit
-        } else if self.crit_hit + self.normal_hit + self.half_hit + self.block_crit_hit + self.block_normal_hit + self.block_half_hit > random_value / added_proba {
+        } else if (self.crit_hit + self.normal_hit + self.half_hit + self.block_crit_hit + self.block_normal_hit + self.block_half_hit) * added_proba > random_value {
             HitType::BlockHalfHit
         } else {
             HitType::NoHit
@@ -152,33 +152,59 @@ impl IntoIterator for Damage {
     }
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub struct BlockDamage {
+    crit_hit: u64,
+    normal_hit: u64,
+    half_hit: u64,
+}
+
+impl BlockDamage {
+    pub fn new(
+        crit_hit: u64, 
+        normal_hit: u64, 
+        half_hit: u64, 
+    ) -> Self {
+            BlockDamage {
+                crit_hit,
+                normal_hit,
+                half_hit,
+            }
+    }
+
+    fn get(&self, h :HitType) -> u64 {
+        match h {
+            HitType::CritHit => self.crit_hit,
+            HitType::NormalHit => self.normal_hit,
+            HitType::HalfHit => self.half_hit,
+            HitType::BlockCritHit => self.crit_hit,
+            HitType::BlockNormalHit => self.normal_hit,
+            HitType::BlockHalfHit => self.half_hit,
+            _ => 0,
+        }
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub struct Hit {
     chance: Chance,
-    damage: Damage,
     body_part: BodyPart,
 }
 
 impl Hit {
-    pub fn new(chance: Chance, damage: Damage, body_part: BodyPart) -> Self {
+    pub fn new(chance: Chance, body_part: BodyPart) -> Self {
             Hit {
                 chance,
-                damage,
                 body_part,
             }
     }
 
-    pub fn simulate_damage(&self, added_proba: Option<f64>) -> (f64, HitType) {
-        let hit_type = self.chance.draw(added_proba);
-        let hit_damage = self.damage.get(hit_type);
-        (hit_damage as f64, hit_type)
+    pub fn draw(&self, added_proba: Option<f64>) -> HitType {
+        self.chance.draw(added_proba)
     }
 
     pub fn get_chance(&self) -> Chance {
         self.chance
-    }
-    pub fn get_damage(&self) -> Damage {
-        self.damage
     }
     pub fn get_bodypart_hit(&self) -> BodyPart {
         self.body_part

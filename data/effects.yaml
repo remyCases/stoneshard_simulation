@@ -98,3 +98,15 @@ Daze:
   effect:
     move_res: -0.25
     control_res: -0.25
+
+Poisoning:
+  id: Poisoning
+  turn: 5
+  effect:
+    percent_damage_receive: 0.04
+
+AcidBath:
+  id: AcidBath
+  turn: 5
+  effect:
+    percent_damage_receive: 0.07
