@@ -184,3 +184,108 @@ impl Hit {
         self.body_part
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chance_crit() {
+        let chance = Chance::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        for _ in 0..100 {
+            assert_eq!(chance.draw(None), HitType::CritHit);
+        }
+    }
+    #[test]
+    fn test_chance_normal() {
+        let chance = Chance::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
+        for _ in 0..100 {
+            assert_eq!(chance.draw(None), HitType::NormalHit);
+        }
+    }
+    #[test]
+    fn test_chance_half() {
+        let chance = Chance::new(0.0, 0.0, 1.0, 0.0, 0.0, 0.0);
+        for _ in 0..100 {
+            assert_eq!(chance.draw(None), HitType::HalfHit);
+        }
+    }
+    #[test]
+    fn test_chance_blockcrit() {
+        let chance = Chance::new(0.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+        for _ in 0..100 {
+            assert_eq!(chance.draw(None), HitType::BlockCritHit);
+        }
+    }
+    #[test]
+    fn test_chance_blocknormal() {
+        let chance = Chance::new(0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+        for _ in 0..100 {
+            assert_eq!(chance.draw(None), HitType::BlockNormalHit);
+        }
+    }
+    #[test]
+    fn test_chance_blockhalf() {
+        let chance = Chance::new(0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+        for _ in 0..100 {
+            assert_eq!(chance.draw(None), HitType::BlockHalfHit);
+        }
+    }
+    #[test]
+    fn test_chance_nohit() {
+        let chance = Chance::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        for _ in 0..100 {
+            assert_eq!(chance.draw(None), HitType::NoHit);
+        }
+    }
+
+    #[test]
+    fn test_chance_no_crit() {
+        let chance = Chance::new(0.0, 0.1, 0.1, 0.1, 0.1, 0.1);
+        for _ in 0..100 {
+            assert_ne!(chance.draw(None), HitType::CritHit);
+        }
+    }
+    #[test]
+    fn test_chance_no_normal() {
+        let chance = Chance::new(0.1, 0.0, 0.1, 0.1, 0.1, 0.1);
+        for _ in 0..100 {
+            assert_ne!(chance.draw(None), HitType::NormalHit);
+        }
+    }
+    #[test]
+    fn test_chance_no_half() {
+        let chance = Chance::new(0.1, 0.1, 0.0, 0.1, 0.1, 0.1);
+        for _ in 0..100 {
+            assert_ne!(chance.draw(None), HitType::HalfHit);
+        }
+    }
+    #[test]
+    fn test_chance_no_blockcrit() {
+        let chance = Chance::new(0.1, 0.1, 0.1, 0.0, 0.1, 0.1);
+        for _ in 0..100 {
+            assert_ne!(chance.draw(None), HitType::BlockCritHit);
+        }
+    }
+    #[test]
+    fn test_chance_no_blocknormal() {
+        let chance = Chance::new(0.1, 0.1, 0.1, 0.1, 0.0, 0.1);
+        for _ in 0..100 {
+            assert_ne!(chance.draw(None), HitType::BlockNormalHit);
+        }
+    }
+    #[test]
+    fn test_chance_no_blockhalf() {
+        let chance = Chance::new(0.1, 0.1, 0.1, 0.1, 0.1, 0.0);
+        for _ in 0..100 {
+            assert_ne!(chance.draw(None), HitType::BlockHalfHit);
+        }
+    }
+    #[test]
+    fn test_chance_no_nohit() {
+        let chance = Chance::new(0.1, 0.1, 0.1, 0.1, 0.3, 0.3);
+        for _ in 0..100 {
+            assert_ne!(chance.draw(None), HitType::NoHit);
+        }
+    }
+}
