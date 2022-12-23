@@ -43,7 +43,7 @@ The project uses currently three differents yaml datafiles:
 - [characters.yaml](data/characters.yaml) storing data about the stats of the player character and diverse foe. Data come from either the wiki or knowledge from the ingame tooltip.
 - [effects.yaml](data/effects.yaml) describing the effect skills have on stats.
 
-You can edit your specific stats of your character in the characters.yaml file under the "main" field and add more foes (Moose/Gulon, ...). You can also change the action.yaml file to specify how you and your foe will start the combat. Your effects are under the "self" field, and your foe ones under the "other" field. Supported skills are listed in the "IdSkills" enum in [stats.rs](src/stats.rs). 
+You can edit your specific stats of your character in the characters.yaml file under the "main" field and add more foes (Moose/Gulon, ...). You can also change the action.yaml file to specify how you and your foe will start the combat. Your effects are under the "self" field, and your foe ones under the "other" field. Supported skills are listed in the "IdSkills" enum in [stat.rs](src/stat.rs). 
 
 Adding more effects and skills in the effects.yaml won't be enough to use them in the action.yaml (it will also crash the code).
 
