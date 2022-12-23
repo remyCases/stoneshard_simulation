@@ -273,24 +273,21 @@ fn monte_carlo_damage<'a>(
 }
 
 fn main() -> Result<(), serde_yaml::Error> {
-    let path_enemies: &str = "./data/enemies.yaml";
     let path_chars: &str = "./data/characters.yaml";
     let path_effects: &str = "./data/effects.yaml";
     let path_action: &str = "./data/action.yaml";
 
-    let file_enemies = File::open(path_enemies).expect("Unable to open file");
     let file_chars = File::open(path_chars).expect("Unable to open file");
     let file_effects = File::open(path_effects).expect("Unable to open file");
     let file_action = File::open(path_action).expect("Unable to open file");
 
-    let deserialized_enemies: HashMap<String, Stat> = serde_yaml::from_reader(&file_enemies).unwrap();
     let deserialized_chars: HashMap<String, Stat> = serde_yaml::from_reader(&file_chars).unwrap();
     let deserialized_effects: HashMap<IdSkills, Skill> = serde_yaml::from_reader(&file_effects).unwrap();
     let deserialized_action: HashMap<String, Vec<IdSkills>> = serde_yaml::from_reader(&file_action).unwrap();
 
     let ennemy_name = "crawler";
     let mut ennemy: Char = Char { 
-        stat: deserialized_enemies[ennemy_name].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
+        stat: deserialized_chars[ennemy_name].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
     };
     let mut player: Char = Char { 
         stat: deserialized_chars["main"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
