@@ -88,7 +88,7 @@ struct StatSimu {
 
 impl StatSimu {
     fn confident_interval(&self) -> [f64; 3] {
-        let factor: f64 = f64::sqrt(self.var / self.n as f64) * 1.96;
+        let factor: f64 = if self.n != 0 { f64::sqrt(self.var / self.n as f64) * 1.96 } else { 0.0 };
         [self.mean - factor, self.mean, self.mean + factor]
     }
 }
@@ -248,9 +248,12 @@ fn monte_carlo_damage<'a>(
         sumsq_hp_second += result_simulation.second_hp_at_end* result_simulation.second_hp_at_end;
     }
 
+    let n_first = sum_win;
+    let n_second = n_simu - sum_win;
+
     let mean_win: f64 = sum_win as f64/ n_simu as f64;
-    let mean_hp_first: f64 = sum_hp_first as f64/ n_simu as f64;
-    let mean_hp_second: f64 = sum_hp_second as f64/ n_simu as f64;
+    let mean_hp_first: f64 = if n_first != 0 { sum_hp_first as f64/ n_first as f64 } else { 0.0 };
+    let mean_hp_second: f64 = if n_second != 0 { sum_hp_second as f64/ n_second as f64 } else { 0.0 };
     Some([
         StatSimu{
             mean: mean_win,
@@ -259,13 +262,13 @@ fn monte_carlo_damage<'a>(
         }, 
         StatSimu{
             mean: mean_hp_first,
-            var: sumsq_hp_first as f64/ n_simu as f64 - mean_hp_first * mean_hp_first,
-            n: n_simu,
+            var: if n_first != 0 { sumsq_hp_first as f64/ n_first as f64 - mean_hp_first * mean_hp_first } else { 0.0 },
+            n: n_first,
         },
         StatSimu{
             mean: mean_hp_second,
-            var: sumsq_hp_second as f64/ n_simu as f64 - mean_hp_second * mean_hp_second,
-            n: n_simu,
+            var: if n_second != 0 { sumsq_hp_second as f64/ n_second as f64 - mean_hp_second * mean_hp_second } else { 0.0 },
+            n: n_second,
         }])
 }
 
@@ -285,55 +288,45 @@ fn main() -> Result<(), serde_yaml::Error> {
     let deserialized_effects: HashMap<IdSkills, Skill> = serde_yaml::from_reader(&file_effects).unwrap();
     let deserialized_action: HashMap<String, Vec<IdSkills>> = serde_yaml::from_reader(&file_action).unwrap();
 
-    let mut ref_bear: Char = Char { 
-        stat: deserialized_enemies["crawler"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
+    let ennemy_name = "crawler";
+    let mut ennemy: Char = Char { 
+        stat: deserialized_enemies[ennemy_name].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
     };
-    let mut ref_main: Char = Char { 
-        stat: deserialized_chars["main_rot"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
-    };
-
-    let mut buf_bear: Char = Char { 
-        stat: deserialized_enemies["crawler"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
-    };
-    let mut buf_main: Char = Char { 
+    let mut player: Char = Char { 
         stat: deserialized_chars["main"].clone(), skills: HashMap::<IdSkills, &Skill>::new(), 
     };
 
-    for s in deserialized_action["other_ref"].iter() {
-        ref_bear.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
-    }
-    for s in deserialized_action["self_ref"].iter() {
-        ref_main.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
-    }
     for s in deserialized_action["other"].iter() {
-        buf_bear.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
+        ennemy.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
     }
     for s in deserialized_action["self"].iter() {
-        buf_main.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
+        player.skills.insert(deserialized_effects[s].id, &deserialized_effects[s]);
     }
 
     let max_turn: u64 = 100;
     let raw_expectation = monte_carlo_damage(
-        &mut ref_bear, 
-        &mut ref_main, 
+        &mut ennemy, 
+        &mut player, 
         max_turn, 
         &deserialized_effects
     );
     let unwrap_raw = raw_expectation.unwrap();
-    for i in 0..3 {
-        println!("{:?}", unwrap_raw[i].confident_interval());
-    }
 
-    let after_buf_expectation = monte_carlo_damage(
-        &mut buf_bear, 
-        &mut buf_main, 
-        max_turn, 
-        &deserialized_effects
+    let win_confidence_interval = unwrap_raw[0].confident_interval();
+    let hp_ennemy = unwrap_raw[1].confident_interval();
+    let hp_player = unwrap_raw[2].confident_interval();
+    println!(
+        "Chance for {:} to win: {:}.\nConfidence interval with confidence level at 95%: [{:}, {:}]\n", 
+        ennemy_name, win_confidence_interval[1], win_confidence_interval[0], win_confidence_interval[2]
     );
-    let unwrap_buf = after_buf_expectation.unwrap();
-    for i in 0..3 {
-        println!("{:?}", unwrap_buf[i].confident_interval());
-    }
+    println!(
+        "Expected {:}'s hp at the end of combat if winning: {:}.\nConfidence interval with confidence level at 95%: [{:}, {:}]\n", 
+        ennemy_name, hp_ennemy[1], hp_ennemy[0], hp_ennemy[2]
+    );
+    println!(
+        "Expected player's hp at the end of combat if winning: {:}.\nConfidence interval with confidence level at 95%: [{:}, {:}]\n", 
+        hp_player[1], hp_player[0], hp_player[2]
+    );
 
     Ok(()) 
 }
