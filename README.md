@@ -18,8 +18,9 @@ Currently, the project is limited. It tries to resolve combat as a static one, o
 
 It doesn't use (planned for the future):
 
-- use of active skills during the battle (buf skills & damaged ones)
-- complex logic for skills (for instance fencer stance is set at 1 stack and can't increase)
+- dual welding
+- use of active skills during the battle (buf skills & damage ones)
+- complex logic for skills (for instance, currently fencer stance is set at 1 stack and can't increase)
 - magic damage other than caustic and poison
 - energy management
 - complex logic for secondary effects (for instance daze removing the use of abilities and evolving in stun if re applied)
@@ -38,11 +39,11 @@ The tool is not made to decide which skills are the best nor how you can optimiz
 
 The project uses currently three differents yaml datafiles:
 
-- [action.yaml](data/action.yaml) describing the skills applyed on the player character and the enemy.
+- [action.yaml](data/action.yaml) describing the skills applied on the player character and the enemy.
 - [characters.yaml](data/characters.yaml) storing data about the stats of the player character and diverse foe. Data come from either the wiki or knowledge from the ingame tooltip.
 - [effects.yaml](data/effects.yaml) describing the effect skills have on stats.
 
-You can edit your specific stats of your character in the characters.yaml file under the "main" field and add more foes (Moose/Gulon, ...). You can also change the action.yaml file to specify how you and your foe will start the combat. Your effects are under the "self" field, and your foe ones under the "other" field. Supported skills are listed in the "IdSkills" enum in [hit.rs](src/hit.rs). 
+You can edit your specific stats of your character in the characters.yaml file under the "main" field and add more foes (Moose/Gulon, ...). You can also change the action.yaml file to specify how you and your foe will start the combat. Your effects are under the "self" field, and your foe ones under the "other" field. Supported skills are listed in the "IdSkills" enum in [stats.rs](src/stats.rs). 
 
 Adding more effects and skills in the effects.yaml won't be enough to use them in the action.yaml (it will also crash the code).
 
